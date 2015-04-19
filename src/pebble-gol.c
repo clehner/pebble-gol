@@ -15,15 +15,6 @@ struct {
 
 bool game_reset = false;
 
-static void iterate(uint8_t *from, uint8_t *to, uint8_t len) {
-  uint8_t carry = 0;
-  for (int x = 0; x < len; x++) {
-    uint16_t value = carry ^ from[x] ^ (from[x] << 1);
-    to[x] = value;
-    carry = value >> 8;
-  }
-}
-
 static void reset_game() {
   game_reset = true;
 }
@@ -90,29 +81,49 @@ static void update_proc(Layer *this_layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(this_layer);
   GBitmap *buffer = graphics_capture_frame_buffer(ctx);
   if (!buffer) return;
-  uint8_t height = bounds.size.h;
+  int8_t height = bounds.size.h;
+  int8_t width = bounds.size.w;
   uint8_t *data = gbitmap_get_data(buffer);
   uint8_t bytes_per_row = gbitmap_get_bytes_per_row(buffer);
   uint8_t (*fb_a)[bytes_per_row] = (uint8_t (*)[bytes_per_row])data;
 
+#define cell(i, j) \
+  (fb_a[i < 0 ? i + height : i >= height ? i - height : i]\
+   [(j < 0 ? j + width : j >= width ? j - width : j) / 8]\
+   & (1 << (j % 8))) ? 1 : 0
+
   if (game_reset) {
     game_reset = false;
-    for (uint8_t i = 0; i < height; i++)
+    for (uint8_t i = 0; i < (uint8_t)height; i++)
       for (uint8_t j = 0; j < bytes_per_row; j++)
-        fb_a[i][j] = rand() % 8;
+        fb_a[i][j] = rand() & 0xff;
 
-  } else for (uint8_t i = 0; i < height; i++) {
-    for (uint8_t j = 0; j < bytes_per_row; j++)
-      fb_a[i][j] = i%2 == 0 ? 0b01010101 : 0b10101010;
+  } else for (int8_t i = 0; i < (uint8_t)height; i++) {
+    for (int8_t j = 0; j < (uint8_t)width; j++) {
+      int8_t num_neighbors =
+        cell(i-1, j-1) + cell(i, j-1) + cell(i+1, j-1) +
+        cell(i-1, j  ) +                cell(i+1, j  ) +
+        cell(i-1, j+1) + cell(i, j+1) + cell(i+1, j+1);
+      uint8_t bitmask = 1 << ((uint8_t)j % 8);
+      uint8_t live = fb_a[i][(uint8_t)j / 8] & bitmask;
+      /*
+      if (live ?
+          !(num_neighbors == 2 || num_neighbors == 3) :
+          (num_neighbors == 3))
+          */
+      if (live)
+        fb_a[i][j / 8] ^= bitmask;
+    }
   }
+#undef cell
 
   graphics_release_frame_buffer(ctx, buffer);
 }
 
 static void window_load(Window *window) {
   window_layer = window_get_root_layer(window);
-
   layer_set_update_proc(window_layer, update_proc);
+  app_timer_register(ACCEL_STEP_MS, timer_callback, NULL);
 }
 
 static void window_unload(Window *window) {
@@ -129,7 +140,6 @@ static void init(void) {
   });
   const bool animated = true;
   window_stack_push(window, animated);
-  app_timer_register(ACCEL_STEP_MS, timer_callback, NULL);
 }
 
 static void deinit(void) {
