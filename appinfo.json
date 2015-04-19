@@ -1,10 +1,10 @@
 {
-  "uuid": "d2f06b8b-739a-4191-b633-0d448407a43d",
+  "uuid": "611834e0-f4aa-480d-8f5a-3f42f8e9ff22",
   "shortName": "Game of Life",
   "longName": "Game of Life",
   "companyName": "Charles Lehner [BrickHack]",
   "versionCode": 1,
-  "versionLabel": "1.0",
+  "versionLabel": "1.1",
   "sdkVersion": "3",
   "targetPlatforms": ["aplite", "basalt"],
   "watchapp": {

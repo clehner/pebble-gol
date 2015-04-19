@@ -2,7 +2,7 @@
 
 #define WIDTH 144
 
-#define ACCEL_STEP_MS 50
+#define ACCEL_STEP_MS 250
 #define ACCEL_RATIO 0x1000
 
 static Window *window;
@@ -14,6 +14,7 @@ struct {
 } game_scroll = {0, 0};
 
 bool game_reset = false;
+bool game_clear = false;
 
 static void reset_game() {
   game_reset = true;
@@ -38,11 +39,12 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   layer_mark_dirty(window_layer);
 }
 
-/*
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
+  game_clear = true;
   layer_mark_dirty(window_layer);
 }
 
+/*
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   copy_row(seed, last);
   iterate(last, seed, WIDTH / 8);
@@ -52,10 +54,10 @@ static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
 
 static void click_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_SELECT, select_click_handler);
+  window_single_click_subscribe(BUTTON_ID_UP, up_click_handler);
   /*
   window_long_click_subscribe(BUTTON_ID_SELECT, 500,
       select_long_click_handler, NULL);
-  window_single_repeating_click_subscribe(BUTTON_ID_UP, 30, up_click_handler);
   window_single_repeating_click_subscribe(BUTTON_ID_DOWN, 30,
       down_click_handler);
   */
@@ -73,8 +75,8 @@ static void timer_callback(void *data) {
   game_scroll.x += accel.x / ACCEL_RATIO;
   game_scroll.y += accel.y / ACCEL_RATIO;
 
-  layer_mark_dirty(window_layer);
   app_timer_register(ACCEL_STEP_MS, timer_callback, NULL);
+  layer_mark_dirty(window_layer);
 }
 
 static void update_proc(Layer *this_layer, GContext *ctx) {
@@ -88,31 +90,39 @@ static void update_proc(Layer *this_layer, GContext *ctx) {
   uint8_t (*fb_a)[bytes_per_row] = (uint8_t (*)[bytes_per_row])data;
 
 #define cell(i, j) \
-  (fb_a[i < 0 ? i + height : i >= height ? i - height : i]\
-   [(j < 0 ? j + width : j >= width ? j - width : j) / 8]\
-   & (1 << (j % 8))) ? 1 : 0
+  (((i) < 0 || (j) < 0) ? 1 : \
+   ((i) >= (uint8_t)height || (j) >= (uint8_t)width) ? 1 :\
+  ((fb_a[(i)][(uint8_t)(j)/8] & (1 << ((uint8_t)(j) % 8))) != 0))
+  /*
+  ((fb_a[(i) < 0 ? (i) + height : (i) >= height ? (i) - height : (i)]\
+   [((j) < 0 ? (j) + width : (j) >= width ? (j) - width : (j)) / 8]\
+   & (1 << (((j) < 0 ? (j) + width : (j)) % 8))) ? 1 : 0)
+   */
 
-  if (game_reset) {
+  if (game_clear) {
+    game_clear = false;
+    for (uint8_t i = 0; i < (uint8_t)height; i++)
+      for (uint8_t j = 0; j < bytes_per_row; j++)
+        fb_a[i][j] = 0;
+
+  } else if (game_reset) {
     game_reset = false;
     for (uint8_t i = 0; i < (uint8_t)height; i++)
       for (uint8_t j = 0; j < bytes_per_row; j++)
         fb_a[i][j] = rand() & 0xff;
 
-  } else for (int8_t i = 0; i < (uint8_t)height; i++) {
-    for (int8_t j = 0; j < (uint8_t)width; j++) {
+  } else for (int16_t i = 0; i < (uint8_t)height; i++) {
+    for (int16_t j = 0; j < (uint8_t)width; j++) {
       int8_t num_neighbors =
         cell(i-1, j-1) + cell(i, j-1) + cell(i+1, j-1) +
         cell(i-1, j  ) +                cell(i+1, j  ) +
         cell(i-1, j+1) + cell(i, j+1) + cell(i+1, j+1);
       uint8_t bitmask = 1 << ((uint8_t)j % 8);
       uint8_t live = fb_a[i][(uint8_t)j / 8] & bitmask;
-      /*
       if (live ?
           !(num_neighbors == 2 || num_neighbors == 3) :
           (num_neighbors == 3))
-          */
-      if (live)
-        fb_a[i][j / 8] ^= bitmask;
+        fb_a[i][(uint8_t)j / 8] ^= bitmask;
     }
   }
 #undef cell
@@ -123,7 +133,6 @@ static void update_proc(Layer *this_layer, GContext *ctx) {
 static void window_load(Window *window) {
   window_layer = window_get_root_layer(window);
   layer_set_update_proc(window_layer, update_proc);
-  app_timer_register(ACCEL_STEP_MS, timer_callback, NULL);
 }
 
 static void window_unload(Window *window) {
@@ -140,6 +149,7 @@ static void init(void) {
   });
   const bool animated = true;
   window_stack_push(window, animated);
+  app_timer_register(ACCEL_STEP_MS, timer_callback, NULL);
 }
 
 static void deinit(void) {
