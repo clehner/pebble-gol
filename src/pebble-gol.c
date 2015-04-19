@@ -105,6 +105,10 @@ static void update_proc(Layer *this_layer, GContext *ctx) {
       for (uint8_t j = 0; j < bytes_per_row; j++)
         fb_a[i][j] = 0;
 
+    // draw a glider
+    fb_a[10][2] = 0b11000000;
+    fb_a[11][2] = 0b00100000;
+    fb_a[12][2] = 0b11100000;
   } else if (game_reset) {
     game_reset = false;
     for (uint8_t i = 0; i < (uint8_t)height; i++)
