@@ -3,7 +3,7 @@
 #define WIDTH 144
 
 #define ACCEL_STEP_MS 50
-#define ACCEL_RATIO 0x1000
+#define ACCEL_RATIO 0.05
 
 static Window *window;
 static Layer *window_layer;
@@ -70,10 +70,13 @@ static void game_update(uint8_t *data, uint8_t row_size, uint8_t height) {
 
 static void timer_callback(void *data) {
   AccelData accel = (AccelData) { .x = 0, .y = 0, .z = 0 };
-  accel_service_peek(&accel);
-
-  game_scroll.x += accel.x / ACCEL_RATIO;
-  game_scroll.y += accel.y / ACCEL_RATIO;
+  if (accel_service_peek(&accel) == 0) {
+    game_scroll.x += accel.x;
+    game_scroll.y += accel.y;
+  } else {
+    game_scroll.x = 0;
+    game_scroll.y = 0;
+  }
 
   app_timer_register(ACCEL_STEP_MS, timer_callback, NULL);
   layer_mark_dirty(window_layer);
@@ -106,8 +109,8 @@ static void update_proc(Layer *this_layer, GContext *ctx) {
         fb_a[i][j] = 0;
 
     // draw a glider
-    fb_a[10][2] = 0b11000000;
-    fb_a[11][2] = 0b00100000;
+    fb_a[10][2] = 0b11000011;
+    fb_a[11][2] = 0b00100011;
     fb_a[12][2] = 0b11100000;
   } else if (game_reset) {
     game_reset = false;
@@ -124,12 +127,12 @@ static void update_proc(Layer *this_layer, GContext *ctx) {
           cell(i-1, j-1) + cell(i, j-1) + cell(i+1, j-1) +
           cell(i-1, j  ) +                cell(i+1, j  ) +
           cell(i-1, j+1) + cell(i, j+1) + cell(i+1, j+1);
-        uint8_t bitmask = 1 << ((uint8_t)j % 8);
-        uint8_t live = fb_a[i][(uint8_t)j / 8] & bitmask;
+        uint8_t bitmask = 1 << ((uint8_t)x % 8);
+        uint8_t live = fb_a[y][(uint8_t)x / 8] & bitmask;
         if (live ?
             !(num_neighbors == 2 || num_neighbors == 3) :
             (num_neighbors == 3))
-          fb_a[i][(uint8_t)j / 8] ^= bitmask;
+          fb_a[y][(uint8_t)x / 8] ^= bitmask;
       }
     }
     game_scroll.x = 0;
@@ -160,10 +163,12 @@ static void init(void) {
   const bool animated = true;
   window_stack_push(window, animated);
   app_timer_register(ACCEL_STEP_MS, timer_callback, NULL);
+  accel_data_service_subscribe(0, NULL);
 }
 
 static void deinit(void) {
   window_destroy(window);
+  accel_data_service_unsubscribe();
 }
 
 int main(void) {
