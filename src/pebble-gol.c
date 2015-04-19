@@ -9,8 +9,8 @@ static Window *window;
 static Layer *window_layer;
 
 struct {
-  uint8_t x;
-  uint8_t y;
+  int16_t x;
+  int16_t y;
 } game_scroll = {0, 0};
 
 bool game_reset = false;
@@ -115,19 +115,25 @@ static void update_proc(Layer *this_layer, GContext *ctx) {
       for (uint8_t j = 0; j < bytes_per_row; j++)
         fb_a[i][j] = rand() & 0xff;
 
-  } else for (int16_t i = 0; i < (uint8_t)height; i++) {
-    for (int16_t j = 0; j < (uint8_t)width; j++) {
-      int8_t num_neighbors =
-        cell(i-1, j-1) + cell(i, j-1) + cell(i+1, j-1) +
-        cell(i-1, j  ) +                cell(i+1, j  ) +
-        cell(i-1, j+1) + cell(i, j+1) + cell(i+1, j+1);
-      uint8_t bitmask = 1 << ((uint8_t)j % 8);
-      uint8_t live = fb_a[i][(uint8_t)j / 8] & bitmask;
-      if (live ?
-          !(num_neighbors == 2 || num_neighbors == 3) :
-          (num_neighbors == 3))
-        fb_a[i][(uint8_t)j / 8] ^= bitmask;
+  } else {
+    for (int16_t y = 0; y < (uint8_t)height; y++) {
+      for (int16_t x = 0; x < (uint8_t)width; x++) {
+        int16_t i = y + game_scroll.y,
+                j = x + game_scroll.x;
+        int8_t num_neighbors =
+          cell(i-1, j-1) + cell(i, j-1) + cell(i+1, j-1) +
+          cell(i-1, j  ) +                cell(i+1, j  ) +
+          cell(i-1, j+1) + cell(i, j+1) + cell(i+1, j+1);
+        uint8_t bitmask = 1 << ((uint8_t)j % 8);
+        uint8_t live = fb_a[i][(uint8_t)j / 8] & bitmask;
+        if (live ?
+            !(num_neighbors == 2 || num_neighbors == 3) :
+            (num_neighbors == 3))
+          fb_a[i][(uint8_t)j / 8] ^= bitmask;
+      }
     }
+    game_scroll.x = 0;
+    game_scroll.y = 0;
   }
 #undef cell
 
