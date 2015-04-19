@@ -2,7 +2,7 @@
 
 #define WIDTH 144
 
-#define ACCEL_STEP_MS 250
+#define ACCEL_STEP_MS 50
 #define ACCEL_RATIO 0x1000
 
 static Window *window;
